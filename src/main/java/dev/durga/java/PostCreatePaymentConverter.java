@@ -3,6 +3,8 @@ package dev.durga.java;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -20,6 +22,8 @@ public class PostCreatePaymentConverter {
 	private static final String FILE_NAME = "post-create-payment-handler.xml";
 	private static final String VARIABLE = "variable";
 	private static final String VARIABLE_NAME = "variableName";
+    private static final String CONDITION_PATTERN = "(?i)\\bif\\b.*?(?:\\belse if\\b.*?)*\\belse\\b";
+
 
 	public static void main(String[] args) {
 		try {
@@ -32,7 +36,7 @@ public class PostCreatePaymentConverter {
 		}
 	}
 
-	public static List<DataLineage> extractDataLineageFromXML(String filePath) throws Exception {
+	private static List<DataLineage> extractDataLineageFromXML(String filePath) throws Exception {
 		Document doc = parseXML(filePath);
 		List<DataLineage> dataLineageList = new ArrayList<>();
 		NodeList variableNodes = doc.getElementsByTagName(VARIABLE);
@@ -49,7 +53,7 @@ public class PostCreatePaymentConverter {
 				dataLineage.setFilePath(FILE_PATH);
 				dataLineage.setFileName(FILE_NAME);
 				dataLineage.setVariableName(variableName);
-				dataLineage.setTransformation("No");
+				dataLineage.setTransformation(containsIfElseIfElse(lineContentList.get(j)));
 				dataLineage.setLineContent(lineContentList.get(j));
 				dataLineageList.add(dataLineage);
 			}
@@ -69,7 +73,7 @@ public class PostCreatePaymentConverter {
 		return variablesContent;
 	}
 
-	public static List<String> extractLinesBetweenVars(String input) {
+	private static List<String> extractLinesBetweenVars(String input) {
 		List<String> result = new ArrayList<>();
 		int startIndex = 0;
 		while (startIndex < input.length()) {
@@ -89,13 +93,19 @@ public class PostCreatePaymentConverter {
 		return result;
 	}
 	
-	public static String extractBeforeFun(String input) {
+	private static String extractBeforeFun(String input) {
         int funIndex = input.indexOf("fun");
         if (funIndex != -1) {
             return input.substring(0, funIndex).trim();
         } else {
             return input.trim();
         }
+    }
+	
+	private static String containsIfElseIfElse(String input) {
+        Pattern pattern = Pattern.compile(CONDITION_PATTERN, Pattern.DOTALL);
+        Matcher matcher = pattern.matcher(input);
+        return matcher.find() ? "YES" : "NO";
     }
 
 	private static Document parseXML(String filePath) throws Exception {

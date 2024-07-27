@@ -73,5 +73,4 @@ public class DataLineage {
 				+ filePath + ", fileName=" + fileName + ", variableName=" + variableName + ", transformation="
 				+ transformation + ", lineContent=" + lineContent + "]";
 	}
-
 }
