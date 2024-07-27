@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<root>
+	<transform name="Save Input">
+		<variables>
+			<variable variableName="inputPayload">
+                <![CDATA[
+                %dw 2.0
+                output application/json
+                var defaultTaxRoutingNumber = p('defaultTaxRoutingNumber')
+                ---
+                payload update {
+                  case payload at .payment -> payload update {
+                    case .payee.destination.account.accountIdentification.nationalIdentification -> 
+                     (if(payload.payee.destination.account.accountIdentification.nationalIdentification == defaultTaxRoutingNumber) defaultTaxRoutingNumber ++ defaultTaxRoutingNumber
+                     else payload.payee.destination.account.accountIdentification.nationalIdentification
+                     )
+                  }
+                }
+                ]]>
+            </variable>
+			<variable variableName="isCoexistence">
+                <![CDATA[
+                %dw 2.0
+                output application/java
+                var coexistenceHeader = upper(p("COEXISTENCE"))
+                ---
+                coexistenceHeader == p('constants.Y')
+                ]]>
+            </variable>
+			<variable variableName="transferType">
+                <![CDATA[
+                %dw 2.0
+                output application/java
+                var payeeId = payload.payment.payee.payeeId
+                var destinationAccountId = payload.payment.payee.destination.account.accountIdentification.internalIdentification
+                var company = p("COMPANY")
+                var out = if(payeeId == p('transferType.me')) p('transferType.myAccounts')
+                            else if(destinationAccountId startsWith(company)) p('transferType.internalTransfer')
+                            else p('transferType.externalTransfer')
+                ---
+                out
+                ]]>
+            </variable>
+			<variable variableName="periodicity">
+                <![CDATA[
+                %dw 2.0
+                output application/java
+                var periodicity = payload.payment.periodicity.periodicityId
+                ---
+                lower(periodicity default p('constants.once'))
+                ]]>
+            </variable>
+			<variable variableName="varCreatedDate">
+                <![CDATA[
+                %dw 2.0
+                output application/java
+                var current = now()
+                var currentDate = (current as Date) as String {format:"yyyy-MM-dd"}
+                var currentTime = (current as Time) as String {format:"HH:mm:ss.SSS"}
+                var varCreatedDate = currentDate ++ "T" ++ currentTime ++ "Z"
+                ---
+                varCreatedDate
+                ]]>
+            </variable>
+			<variable variableName="requestExecutionDateIsToday">
+                <![CDATA[
+                %dw 2.0
+                output application/java
+                var requestExecutionDate = payload.payment.requestExecutionDate
+                var currentDate = now() as Date as String {format : "yyyy-MM-dd"}
+                ---
+                requestExecutionDate as String == currentDate
+                ]]>
+            </variable>
+			<variable variableName="endpoint">
+                <![CDATA[
+                %dw 2.0
+                output application/java
+                ---
+                p('endpoint.create-payment')
+                ]]>
+            </variable>
+			<variable variableName="isWire">
+                <![CDATA[
+                %dw 2.0
+                output application/java
+                var urgencyIndicator = payload.payment.urgencyIndicator default ""
+                ---
+                lower(urgencyIndicator) == "instant"
+                ]]>
+            </variable>
+		</variables>
+	</transform>
+	<transform name="varUniqueId">
+		<variables>
+			<variable variableName="varUniqueId">
+                <![CDATA[
+                %dw 2.0
+                output application/java
+                var payerId = payload.payment.payer.payerId
+                var digits = payerId[1 to -1] as Number
+                var varUniqueId = payerId[0] ++ (digits as String {format:"000000000"}) ++ vars.varCreatedDate
+                ---
+                varUniqueId
+                ]]>
+            </variable>
+		</variables>
+	</transform>
+	<transform name="currentInfra">
+		<variables>
+			<variable variableName="currentInfra">
+                <![CDATA[
+                %dw 2.0
+                output application/java
+                var local = p("LOCAL_COMPANY")
+                var remote = p("REMOTE_COMPANY")
+                var cids = p("LOCAL_CID") splitBy ","
+                fun isLocalCompany (cid) = (
+                    (cids map $ == cid) contains true
+                )
+                ---
+                if(isLocalCompany(vars."_headers".cid)) local else remote
+                ]]>
+            </variable>
+		</variables>
+	</transform>
+	<transform name="exceptionMessage">
+		<variables>
+			<variable variableName="exceptionMessage">
+                <![CDATA[
+                %dw 2.0
+                import errorMsg from error::Func
+                output application/java
+
+                var requestExecutionDate = payload.payment.requestExecutionDate as Date
+                var currentDate = now() as Date
+
+                var errorCode = if ((vars.transferType == p('transferType.internalTransfer')) and (vars.inputPayload.payment.payee.actingReference == null)) "PAYMENTS-P-F-0014"
+                            else if (requestExecutionDate < currentDate) "PAYMENTS-P-F-0015"
+                            else ""
+                ---
+                if (isEmpty(errorCode)) null
+                else errorMsg(vars.errorCode[errorCode])
+                ]]>
+            </variable>
+		</variables>
+	</transform>
+	<transform name="inputTaxValidations">
+		<variables>
+			<variable variableName="inputTaxValidations">
+                <![CDATA[
+                %dw 2.0
+                import * from dw::core::Strings
+                import errorMsg from error::Func
+                output application/java
+
+                var inputPayload = vars.inputPayload.payment
+                var nationalIdentification = inputPayload.payee.destination.account.accountIdentification.nationalIdentification
+                var taxData = inputPayload.tax
+
+                fun checkTaxTYpeCode(taxTypeCode) = ( (sizeOf(taxTypeCode) == 5) and (taxTypeCode everyCharacter isNumeric($) or isUpperCase($)) )
+                fun checkTaxMonth(taxMonth) = ( (sizeOf(taxMonth) <= 9) and (taxMonth everyCharacter isAlphanumeric($)) )
+                fun checkTaxYear(taxYear) = ( (sizeOf(taxYear) == 4) and (taxYear everyCharacter isNumeric($)) )
+                fun checkTaxPartyId(taxPartyId) = ( (sizeOf(taxPartyId) == 9) and (taxPartyId everyCharacter isNumeric($)) )
+                fun checkTaxMandatoryFields(tax) = 
+                (    if(tax != null)
+                    if( (tax.party != null) and (tax.period != null))
+                        ( (tax.party.partyId != null) and (tax.period.month != null) and (tax.period.year != null) )
+                    else false
+                else false
+                )
+
+                var taxDataValidation = 
+                (        if( checkTaxMandatoryFields(taxData) )
+                    isEmpty([
+                        checkTaxTYpeCode(taxData.typeCode),
+                        checkTaxMonth(taxData.period.month),
+                        checkTaxYear(taxData.period.year),
+                        checkTaxPartyId(taxData.party.partyId)
+                    ]  filter (!$))
+                else false
+                )
+
+                var isRoutingTax = 
+                    if(sizeOf(nationalIdentification) == sizeOf(p('defaultTaxRoutingNumber')))
+                    (nationalIdentification == p('defaultTaxRoutingNumber'))
+                    else false
+                var isNationalIdentificationTax = (nationalIdentification == p('defaultTaxAccount'))
+                var urgencyIndicator = payload.payment.urgencyIndicator default ""
+
+                var isTaxScenario = (isRoutingTax or isNationalIdentificationTax)
+
+                var errorCodeNumber = if( (isTaxScenario) and (taxData == null)) "PAYMENTS-P-F-0022"
+                     else if( (!isTaxScenario) and (taxData != null)) "PAYMENTS-P-F-0021"
+                     else if( ( isTaxScenario ) and (!taxDataValidation)) "PAYMENTS-P-F-0024"
+                     else if( ( isTaxScenario ) and
+                          ( (lower(urgencyIndicator) != "instant") or (vars.periodicity != p('constants.once'))  )
+                        )  "PAYMENTS-P-F-0023"
+                else ""
+
+                ---
+                if(errorCodeNumber != "")(
+                    errorMsg(vars.errorCode[errorCodeNumber])
+                ) else null
+                ]]>
+            </variable>
+		</variables>
+	</transform>
+	<call name="post-create-payment-orchestrator-subflow" />
+</root>
