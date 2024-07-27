@@ -22,8 +22,7 @@ public class PostCreatePaymentConverter {
 	private static final String FILE_NAME = "post-create-payment-handler.xml";
 	private static final String VARIABLE = "variable";
 	private static final String VARIABLE_NAME = "variableName";
-    private static final String CONDITION_PATTERN = "(?i)\\bif\\b.*?(?:\\belse if\\b.*?)*\\belse\\b";
-
+	private static final String CONDITION_PATTERN = "(?i)\\bif\\b.*?(?:\\belse if\\b.*?)*\\belse\\b";
 
 	public static void main(String[] args) {
 		try {
@@ -46,7 +45,7 @@ public class PostCreatePaymentConverter {
 			String variableName = variableElement.getAttribute(VARIABLE_NAME);
 			String lineContent = variableElement.getTextContent();
 			List<String> lineContentList = extractLineContent(lineContent);
-			for(int j = 0; j < lineContentList.size(); j++) {
+			for (int j = 0; j < lineContentList.size(); j++) {
 				DataLineage dataLineage = new DataLineage();
 				dataLineage.setApiRepositoryName(API_REPOSITORY_NAME);
 				dataLineage.setBranchName(BRANCH_NAME);
@@ -92,21 +91,21 @@ public class PostCreatePaymentConverter {
 
 		return result;
 	}
-	
+
 	private static String extractBeforeFun(String input) {
-        int funIndex = input.indexOf("fun");
-        if (funIndex != -1) {
-            return input.substring(0, funIndex).trim();
-        } else {
-            return input.trim();
-        }
-    }
-	
+		int funIndex = input.indexOf("fun");
+		if (funIndex != -1) {
+			return input.substring(0, funIndex).trim();
+		} else {
+			return input.trim();
+		}
+	}
+
 	private static String containsIfElseIfElse(String input) {
-        Pattern pattern = Pattern.compile(CONDITION_PATTERN, Pattern.DOTALL);
-        Matcher matcher = pattern.matcher(input);
-        return matcher.find() ? "YES" : "NO";
-    }
+		Pattern pattern = Pattern.compile(CONDITION_PATTERN, Pattern.DOTALL);
+		Matcher matcher = pattern.matcher(input);
+		return matcher.find() ? "YES" : "NO";
+	}
 
 	private static Document parseXML(String filePath) throws Exception {
 		DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();

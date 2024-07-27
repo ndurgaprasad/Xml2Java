@@ -1,7 +1,5 @@
 package dev.durga.java;
 
-import java.util.List;
-
 public class DataLineage {
 	private String apiRepositoryName;
 	private String branchName;
